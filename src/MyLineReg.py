@@ -47,11 +47,16 @@ class MyLineReg:
         loss = np.mean((y - y_pred) ** 2)
         grad = 2 / len(x) * np.dot((y_pred - y), x)
         if self.reg and (self.l1_coef or self.l2_coef):
-            if self.reg == 'l1' or self.reg == 'elasticnet':
+            if self.reg == 'l1' and self.l1_coef:
                 loss += self.l1_coef * np.sum(np.abs(self.weights))
                 grad += self.l1_coef * np.sign(self.weights)
-            elif self.reg == 'l2' or self.reg == 'elasticnet':
-                loss += self.l2_coef * np.sum(self.weights**2)
+            elif self.reg == 'l2' and self.l2_coef:
+                loss += self.l2_coef * np.sum(self.weights ** 2)
+                grad += self.l2_coef * 2 * self.weights
+            elif self.reg == 'elasticnet' and self.l1_coef and self.l2_coef:
+                loss += self.l1_coef * np.sum(np.abs(self.weights))
+                grad += self.l1_coef * np.sign(self.weights)
+                loss += self.l2_coef * np.sum(self.weights ** 2)
                 grad += self.l2_coef * 2 * self.weights
         return loss, grad
 
