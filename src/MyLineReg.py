@@ -38,7 +38,7 @@ class MyLineReg:
     def __str__(self):
         return f"MyLineReg class: n_iter={self.n_iter}, learning_rate={self.learn_rate}"
 
-    def _eval_metric_(self, y, y_pred):
+    def __eval_metric(self, y, y_pred):
         # mae mse rmmse mape r2
         residual = np.subtract(y, y_pred)
         metric_name = self.metric
@@ -58,7 +58,7 @@ class MyLineReg:
             metric = 0
         return metric
 
-    def _loss_grad(self, y: pd.Series, y_pred: pd.Series, x: pd.DataFrame, idx=None):
+    def __loss_grad(self, y: pd.Series, y_pred: pd.Series, x: pd.DataFrame, idx=None):
         if idx:
             err = y_pred[idx] - y[idx]
             x = x.iloc[idx, :]
@@ -80,13 +80,13 @@ class MyLineReg:
                 grad += self.l2_coef * 2 * self.weights
         return loss, grad
 
-    def _get_learning_rate(self, step: int):
+    def __get_learning_rate(self, step: int):
         if callable(self.learn_rate):
             return self.learn_rate(step)
         else:
             return self.learn_rate
 
-    def _get_batch_idx(self, size: int):
+    def __get_batch_idx(self, size: int):
         idxes = None
         if self.sgd_sample:
             len_=size
@@ -101,22 +101,22 @@ class MyLineReg:
         random.seed(self.random_state)
         x = X.reset_index(drop=True)
         x.insert(0, 'inter', 1)
-        batch_idx= self._get_batch_idx(len(x))
+        batch_idx= self.__get_batch_idx(len(x))
         self.weights = np.ones(x.shape[1])
         y_pred = np.dot(x, self.weights)
-        loss_metric, grad = self._loss_grad(y, y_pred, x, batch_idx)
+        loss_metric, grad = self.__loss_grad(y, y_pred, x, batch_idx)
         if verbose:
             print(f"start | loss: {loss_metric} | "
-                  f"{self.metric + ': ' + str(self._eval_metric_(y, y_pred)) if self.metric else ''}")
+                  f"{self.metric + ': ' + str(self.__eval_metric(y, y_pred)) if self.metric else ''}")
 
         for i in range(1, self.n_iter + 1):
-            lr =  self._get_learning_rate(i)
+            lr =  self.__get_learning_rate(i)
             self.weights -= lr * grad
-            batch_idx = self._get_batch_idx(len(x))
+            batch_idx = self.__get_batch_idx(len(x))
             y_pred = np.dot(x, self.weights)
-            loss_metric, grad = self._loss_grad(y, y_pred, x, batch_idx)
+            loss_metric, grad = self.__loss_grad(y, y_pred, x, batch_idx)
             if self.metric:
-                self.metric_score = self._eval_metric_(y, y_pred)
+                self.metric_score = self.__eval_metric(y, y_pred)
 
             if verbose:
                 if i % verbose == 0:
