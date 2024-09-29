@@ -35,7 +35,7 @@ class MyLogReg:
             y_sigmoid = 1 / (1 + np.exp(-np.dot(x, self.weights)))
 
             if verbose and i % verbose == 0:
-                print(f"{i} | loss: {log_loss}")
+                print(f"{i} | loss: {log_loss:.4f}")
 
     def get_coef(self):
         return self.weights.to_numpy()[1:]
@@ -46,5 +46,4 @@ class MyLogReg:
 
 mylog = MyLogReg(n_iter=50)
 mylog.fit(X, y, verbose=10)
-print(mylog.get_coef())
 print(np.mean(mylog.get_coef()))
