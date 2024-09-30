@@ -7,7 +7,7 @@ from typing import Optional, Union, Callable
 
 from sklearn.metrics import log_loss
 
-X, y = make_classification(n_samples=100, n_features=14, n_informative=10, random_state=42)
+X, y = make_classification(n_samples=1000, n_features=14, n_informative=10, random_state=42)
 X = pd.DataFrame(X)
 y = pd.Series(y)
 X.columns = [f'col_{col}' for col in X.columns]
@@ -22,6 +22,7 @@ class MyLogReg:
         self.weights = weights
         self.learning_rate = learning_rate
         self.n_iter = n_iter
+        self.metrics = []
 
     def __str__(self):
         return f"MyLogReg class: n_iter={self.n_iter}, learning_rate={self.learning_rate}"
@@ -34,16 +35,16 @@ class MyLogReg:
                 if y_pred[i] == 0:
                     tn += 1
                 elif y_pred[i] == 1:
-                    fn += 1
+                    fp += 1
             elif y_true[i] == 1:
                 if y_pred[i] == 1:
                     tp += 1
                 elif y_pred[i] == 0:
-                    fp += 1
+                    fn += 1
         return tp, tn, fp, fn
 
     def __metric_accuracy(self, tp, tn, fp, fn):
-        return (tp + tn) / tp+tn+fn+fp
+        return (tp + tn) / (tp + tn + fn + fp)
 
     def __metric_precision(self, tp, fp):
         return tp / (tp + fp)
@@ -54,13 +55,13 @@ class MyLogReg:
         import numpy as np
 
     def __calculate_auc(self, probabilities, labels):
-        # Преобразуем данные в numpy массивы
         probabilities = np.array(probabilities)
         labels = np.array(labels)
 
         # Сортируем вероятности по убыванию, сохраняя индексы
         sorted_indices = np.argsort(-probabilities)
         sorted_labels = labels[sorted_indices]
+        sorted_probs = probabilities[sorted_indices]
 
         # Определяем количество положительных и отрицательных классов
         P = np.sum(labels == 1)  # Количество положительных классов (1)
@@ -68,29 +69,64 @@ class MyLogReg:
 
         # Переменные для расчета
         auc_sum = 0
+        positive_count = 0  # Счётчик положительных классов выше текущего элемента
 
-        # Итерируем по каждому объекту с классом 0
-        for i, label in enumerate(sorted_labels):
-            if label == 0:  # Если это отрицательный класс (0)
-                # Считаем количество положительных классов выше (с большей вероятностью)
-                positives_above = np.sum(sorted_labels[:i] == 1)
+        # Итерируем по каждому объекту в отсортированном списке
+        i = 0
+        while i < len(sorted_labels):
+            current_prob = sorted_probs[i]
+            same_prob_positives = 0
+            same_prob_negatives = 0
 
-                # Считаем количество положительных классов с той же вероятностью
-                positives_same = np.sum(sorted_labels[i:] == 1)
+            # Считаем количество элементов с тем же score
+            while i < len(sorted_labels) and sorted_probs[i] == current_prob:
+                if sorted_labels[i] == 1:
+                    same_prob_positives += 1
+                else:
+                    same_prob_negatives += 1
+                i += 1
 
-                # Добавляем количество положительных классов выше плюс половину положительных с таким же скором
-                auc_sum += positives_above + 0.5 * positives_same
+            # Для каждого отрицательного класса с тем же score
+            auc_sum += same_prob_negatives * positive_count + same_prob_negatives * same_prob_positives / 2
+
+            # Увеличиваем количество положительных классов выше текущего уровня
+            positive_count += same_prob_positives
 
         # Рассчитываем финальный AUC
         auc = auc_sum / (P * N)
         return auc
-
-    # Пример использования:
-    # probabilities = [0.9, 0.8, 0.4, 0.7, 0.6, 0.5]
-    # labels = [1, 0, 1, 0, 1, 0]  # Данные классов 0 и 1
-    #
-    # auc = calculate_auc(probabilities, labels)
-    # print(f"AUC: {auc:.3f}")
+        # # Преобразуем данные в numpy массивы
+        # probabilities = np.array(probabilities)
+        # labels = np.array(labels)
+        #
+        # # Сортируем вероятности по убыванию, сохраняя индексы
+        # sorted_indices = np.argsort(-probabilities)
+        # sorted_labels = labels[sorted_indices]
+        #
+        # sorted_probabilities = probabilities[sorted_indices]
+        #
+        # # Определяем количество положительных и отрицательных классов
+        # P = np.sum(labels == 1)  # Количество положительных классов (1)
+        # N = np.sum(labels == 0)  # Количество отрицательных классов (0)
+        #
+        # # Переменные для расчета
+        # auc_sum = 0
+        #
+        # # Итерируем по каждому объекту с классом 0
+        # for i, label in enumerate(sorted_labels):
+        #     if label == 0:  # Если это отрицательный класс (0)
+        #         # Считаем количество положительных классов выше (с большей вероятностью)
+        #         positives_above = np.sum(sorted_labels[:i] == 1)
+        #
+        #         # Считаем количество положительных классов с той же вероятностью
+        #         positives_same = np.sum(sorted_labels[i:] == 1)
+        #
+        #         # Добавляем количество положительных классов выше плюс половину положительных с таким же скором
+        #         auc_sum += positives_above + 0.5 * positives_same
+        #
+        # # Рассчитываем финальный AUC
+        # auc = auc_sum / (P * N)
+        # return auc
 
     def __metric_score(self, X: pd.DataFrame, y: pd.Series):
         score = None
@@ -108,8 +144,7 @@ class MyLogReg:
             recall = self.__metric_recall(tp, fn)
             score = 2 * (prec * recall) / (prec + recall)
         elif self.metric == "roc_auc":
-            pass
-
+            score = self.__calculate_auc(np.round(self.predict_proba(x), 10), y)
         return score
 
     def fit(self, X: pd.DataFrame, y: pd.Series, verbose=False):
@@ -125,7 +160,8 @@ class MyLogReg:
             self.weights -= self.learning_rate * grad
             y_sigmoid = 1 / (1 + np.exp(-np.dot(x, self.weights)))
 
-            metric_score = 1
+            metric_score = self.__metric_score(x, y)
+            self.metrics.append(metric_score)
             if verbose and i % verbose == 0:
                 res_print = f"{i} | loss: {log_loss:.4f} |"
                 if self.metric:
@@ -137,17 +173,20 @@ class MyLogReg:
 
     def predict_proba(self, X: pd.DataFrame):
         x = X[:]
-        x.insert(0, 'inter', 1)
+        if 'inter' not in x.columns:
+            x.insert(0, 'inter', 1)
         return 1 / (1 + np.exp(-np.dot(x, self.weights)))
 
     def predict(self, X: pd.DataFrame):
         y_sigmoid = self.predict_proba(X)
         return np.where(y_sigmoid > .5, 1, 0)
 
+    def get_best_score(self):
+        return self.metrics[-1]
 
 
 
 
-mylog = MyLogReg(n_iter=50, metric='f1')
+mylog = MyLogReg(n_iter=50, metric='roc_auc')
 mylog.fit(X, y, verbose=10)
-print(np.mean(mylog.get_coef()))
+print(mylog.get_best_score())
