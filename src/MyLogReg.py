@@ -40,6 +40,15 @@ class MyLogReg:
     def get_coef(self):
         return self.weights.to_numpy()[1:]
 
+    def predict_proba(self, X: pd.DataFrame):
+        x = X[:]
+        x.insert(0, 'inter', 1)
+        return 1 / (1 + np.exp(-np.dot(x, self.weights)))
+
+    def predict(self, X: pd.DataFrame):
+        y_sigmoid = self.predict_proba(X)
+        return np.where(y_sigmoid > .5, 1, 0)
+
 
 
 
