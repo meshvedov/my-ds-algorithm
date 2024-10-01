@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets import make_classification
 from typing import Optional, Union, Callable
-
-from sklearn.metrics import log_loss
+import random
 
 X, y = make_classification(n_samples=1000, n_features=14, n_informative=10, random_state=42)
 X = pd.DataFrame(X)
@@ -17,7 +16,17 @@ class MyLogReg:
                  n_iter=10,
                  learning_rate=0.1,
                  weights=None,
-                 metric: Optional[Union['accuracy', 'precision', 'recall', 'f1', 'roc_auc']] = None):
+                 metric: Optional[Union['accuracy', 'precision', 'recall', 'f1', 'roc_auc']] = None,
+                 reg: str = None,
+                 l1_coef=0,
+                 l2_coef=0,
+                 sgd_sample=None,
+                 random_state=42):
+        self.random_state = random_state
+        self.sgd_sample = sgd_sample
+        self.l2_coef = l2_coef
+        self.l1_coef = l1_coef
+        self.reg = reg
         self.metric = metric
         self.weights = weights
         self.learning_rate = learning_rate
@@ -28,6 +37,10 @@ class MyLogReg:
         return f"MyLogReg class: n_iter={self.n_iter}, learning_rate={self.learning_rate}"
 
     def __metric_classes(self, y_true, y_pred) -> (int, int, int, int):
+        # TP = np.sum((y_pred == 1) & (y_true == 1))
+        # TN = np.sum((y_pred == 0) & (y_true == 0))
+        # FP = np.sum((y_pred == 1) & (y_true == 0))
+        # FN = np.sum((y_pred == 0) & (y_true == 1))
         assert len(y_true) == len(y_pred), "len(y_true) must equal len(y_pred)"
         tp, tn, fp, fn = 0, 0, 0, 0
         for i in range(len(y_true)):
@@ -51,8 +64,6 @@ class MyLogReg:
 
     def __metric_recall(self, tp, fn):
         return tp / (tp + fn)
-
-        import numpy as np
 
     def __calculate_auc(self, probabilities, labels):
         probabilities = np.array(probabilities)
@@ -95,38 +106,6 @@ class MyLogReg:
         # Рассчитываем финальный AUC
         auc = auc_sum / (P * N)
         return auc
-        # # Преобразуем данные в numpy массивы
-        # probabilities = np.array(probabilities)
-        # labels = np.array(labels)
-        #
-        # # Сортируем вероятности по убыванию, сохраняя индексы
-        # sorted_indices = np.argsort(-probabilities)
-        # sorted_labels = labels[sorted_indices]
-        #
-        # sorted_probabilities = probabilities[sorted_indices]
-        #
-        # # Определяем количество положительных и отрицательных классов
-        # P = np.sum(labels == 1)  # Количество положительных классов (1)
-        # N = np.sum(labels == 0)  # Количество отрицательных классов (0)
-        #
-        # # Переменные для расчета
-        # auc_sum = 0
-        #
-        # # Итерируем по каждому объекту с классом 0
-        # for i, label in enumerate(sorted_labels):
-        #     if label == 0:  # Если это отрицательный класс (0)
-        #         # Считаем количество положительных классов выше (с большей вероятностью)
-        #         positives_above = np.sum(sorted_labels[:i] == 1)
-        #
-        #         # Считаем количество положительных классов с той же вероятностью
-        #         positives_same = np.sum(sorted_labels[i:] == 1)
-        #
-        #         # Добавляем количество положительных классов выше плюс половину положительных с таким же скором
-        #         auc_sum += positives_above + 0.5 * positives_same
-        #
-        # # Рассчитываем финальный AUC
-        # auc = auc_sum / (P * N)
-        # return auc
 
     def __metric_score(self, X: pd.DataFrame, y: pd.Series):
         score = None
@@ -148,16 +127,45 @@ class MyLogReg:
         return score
 
     def fit(self, X: pd.DataFrame, y: pd.Series, verbose=False):
+        random.seed(self.random_state)
         eps = 1e-15
-        x = X[:]
+        x = X[:].reset_index(drop=True)
         x.insert(0, 'inter', 1)
         self.weights = np.ones(x.shape[1])
         y_sigmoid = 1 / (1 + np.exp(-np.dot(x, self.weights)))
 
-        for i in range(self.n_iter):
+        for i in range(1, self.n_iter + 1):
             log_loss = -np.mean(y*np.log(y_sigmoid + eps) + (1 - y) * np.log(1 - y_sigmoid + eps))
-            grad = 1 / len(x) * ((y_sigmoid - y) @ x)
-            self.weights -= self.learning_rate * grad
+
+            k=0
+            if self.sgd_sample:
+                if 0 < self.sgd_sample <= 1:
+                    k=round(len(x) * self.sgd_sample)
+                elif self.sgd_sample > 1:
+                    k = self.sgd_sample
+                idx = random.sample(range(len(x)), k=k)
+                grad = 1 / len(x.iloc[idx, :]) * ((y_sigmoid[idx] - y[idx]) @ x.iloc[idx, :])
+            else:
+                grad = 1 / len(x) * ((y_sigmoid - y) @ x)
+
+            if self.reg:
+                if self.reg == 'l1' and self.l1_coef:
+                    log_loss += self.l1_coef * np.sum(np.abs(self.weights))
+                    grad += self.l1_coef * np.sign(self.weights)
+                elif self.reg == 'l2' and self.l2_coef:
+                    log_loss += self.l2_coef * np.sum(self.weights**2)
+                    grad += self.l2_coef * 2 * self.weights
+                elif self.reg == 'elasticnet' and self.l1_coef and self.l2_coef:
+                    log_loss += self.l1_coef * np.sum(np.abs(self.weights))
+                    log_loss += self.l2_coef * np.sum(self.weights ** 2)
+                    grad += self.l1_coef * np.sign(self.weights)
+                    grad += self.l2_coef * 2 * self.weights
+
+            lr = self.learning_rate
+            if callable(self.learning_rate):
+                lr = self.learning_rate(i)
+
+            self.weights -= lr * grad
             y_sigmoid = 1 / (1 + np.exp(-np.dot(x, self.weights)))
 
             metric_score = self.__metric_score(x, y)
@@ -166,6 +174,7 @@ class MyLogReg:
                 res_print = f"{i} | loss: {log_loss:.4f} |"
                 if self.metric:
                     res_print += f" {self.metric}: {metric_score}"
+                res_print += f" | lr: {lr}"
                 print(res_print)
 
     def get_coef(self):
@@ -187,6 +196,7 @@ class MyLogReg:
 
 
 
-mylog = MyLogReg(n_iter=50, metric='roc_auc')
+mylog = MyLogReg(n_iter=50, metric='recall', learning_rate= .425 #lambda iter: 0.5 * (0.85 ** iter)
+, sgd_sample=.2)
 mylog.fit(X, y, verbose=10)
 print(mylog.get_best_score())
