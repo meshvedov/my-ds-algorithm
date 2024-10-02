@@ -9,14 +9,18 @@ from sklearn.datasets import make_classification
 # X.columns = [f'col_{col}' for col in X.columns]
 
 class MyKNNClf:
-    def __init__(self, k=3) -> None:
+    def __init__(self,
+                 k=3,
+                 metric='euclidean') -> None:
+        self.metric = metric
         self.k = k
         self.train_size = 0
 
     def __str__(self) -> str:
         return f"MyKNNClf class: k={self.k}"
 
-    def __distance_evclid(self, row1, row2):
+
+    def _distance_euclidean(self, row1, row2):
         return np.sqrt(np.sum((row1 - row2) ** 2))
 
 
@@ -30,25 +34,29 @@ class MyKNNClf:
         for _, row1 in X_test.iterrows():
             distances = []
             for _, row2 in self.X_train.iterrows():
-                distances.append(self.__distance_evclid(row1, row2))
+                distances.append(getattr(self, '_distance_' + self.metric)(row1, row2))
+
             k_indices = np.argsort(distances)[:self.k]
-            # k_nearest_labels = self.X_train.iloc[k_indices].index.values
-            most_common_label = self.y_train[k_indices].mode()[0]
-            predictions.append(most_common_label)
+            most_common_label = self.y_train[k_indices].mode()
+            predictions.append(most_common_label[0] if most_common_label.size == 1 else 1)
 
         return np.array(predictions)
 
     def predict_proba(self, X_test: pd.DataFrame):
-        if self.k == 1:
-            return np.ones(shape=len(X_test))
+        # train = np.expand_dims(self.X, axis=0)
+        # test = np.expand_dims(X.to_numpy(), axis=1)
+        # distances = np.sqrt(np.sum((test - train) ** 2, axis=-1))
+        # indx = np.argsort(distances)[:, :self.k]
+        #
+        # return np.mean(self.y[indx], axis=1)
         predictions = []
         for _, row1 in X_test.iterrows():
             distances = []
             for _, row2 in self.X_train.iterrows():
-                distances.append(self.__distance_evclid(row1, row2))
+                distances.append(self.__distance_euclidean(row1, row2))
             k_indices = np.argsort(distances)[:self.k]
-            prob = self.y_train[k_indices].value_counts(normalize=True)[1]
-            predictions.append(prob)
+            prob = self.y_train[k_indices].value_counts(normalize=True).to_dict()
+            predictions.append(prob.get(1, 0))
 
         return np.array(predictions)
 
