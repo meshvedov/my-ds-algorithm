@@ -37,23 +37,10 @@ class MyLogReg:
         return f"MyLogReg class: n_iter={self.n_iter}, learning_rate={self.learning_rate}"
 
     def __metric_classes(self, y_true, y_pred) -> (int, int, int, int):
-        # TP = np.sum((y_pred == 1) & (y_true == 1))
-        # TN = np.sum((y_pred == 0) & (y_true == 0))
-        # FP = np.sum((y_pred == 1) & (y_true == 0))
-        # FN = np.sum((y_pred == 0) & (y_true == 1))
-        assert len(y_true) == len(y_pred), "len(y_true) must equal len(y_pred)"
-        tp, tn, fp, fn = 0, 0, 0, 0
-        for i in range(len(y_true)):
-            if y_true[i] == 0:
-                if y_pred[i] == 0:
-                    tn += 1
-                elif y_pred[i] == 1:
-                    fp += 1
-            elif y_true[i] == 1:
-                if y_pred[i] == 1:
-                    tp += 1
-                elif y_pred[i] == 0:
-                    fn += 1
+        tp = np.sum((y_pred == 1) & (y_true == 1))
+        tn = np.sum((y_pred == 0) & (y_true == 0))
+        fp = np.sum((y_pred == 1) & (y_true == 0))
+        fn = np.sum((y_pred == 0) & (y_true == 1))
         return tp, tn, fp, fn
 
     def __metric_accuracy(self, tp, tn, fp, fn):
@@ -144,22 +131,18 @@ class MyLogReg:
                 elif self.sgd_sample > 1:
                     k = self.sgd_sample
                 idx = random.sample(range(len(x)), k=k)
-                grad = 1 / len(x.iloc[idx, :]) * ((y_sigmoid[idx] - y[idx]) @ x.iloc[idx, :])
+                grad = 1 / len(x.iloc[idx, :]) * ((y_sigmoid[idx] - y.to_numpy()[idx]) @ x.iloc[idx, :])
             else:
-                grad = 1 / len(x) * ((y_sigmoid - y) @ x)
+                grad = 1 / len(x) * np.dot((y_sigmoid - y), x)
 
             if self.reg:
-                if self.reg == 'l1' and self.l1_coef:
+                if self.reg in ['l1', 'elasticnet']:
                     log_loss += self.l1_coef * np.sum(np.abs(self.weights))
                     grad += self.l1_coef * np.sign(self.weights)
-                elif self.reg == 'l2' and self.l2_coef:
+                elif self.reg in ['l2', 'elasticnet']:
                     log_loss += self.l2_coef * np.sum(self.weights**2)
                     grad += self.l2_coef * 2 * self.weights
-                elif self.reg == 'elasticnet' and self.l1_coef and self.l2_coef:
-                    log_loss += self.l1_coef * np.sum(np.abs(self.weights))
-                    log_loss += self.l2_coef * np.sum(self.weights ** 2)
-                    grad += self.l1_coef * np.sign(self.weights)
-                    grad += self.l2_coef * 2 * self.weights
+
 
             lr = self.learning_rate
             if callable(self.learning_rate):
@@ -171,14 +154,14 @@ class MyLogReg:
             metric_score = self.__metric_score(x, y)
             self.metrics.append(metric_score)
             if verbose and i % verbose == 0:
-                res_print = f"{i} | loss: {log_loss:.4f} |"
+                res_print = f"{i} | loss: {log_loss:.4f}"
                 if self.metric:
-                    res_print += f" {self.metric}: {metric_score}"
+                    res_print += f" | {self.metric}: {metric_score}"
                 res_print += f" | lr: {lr}"
                 print(res_print)
 
     def get_coef(self):
-        return self.weights.to_numpy()[1:]
+        return self.weights[1:]
 
     def predict_proba(self, X: pd.DataFrame):
         x = X[:]
@@ -194,9 +177,7 @@ class MyLogReg:
         return self.metrics[-1]
 
 
-
-
 mylog = MyLogReg(n_iter=50, metric='recall', learning_rate= .425 #lambda iter: 0.5 * (0.85 ** iter)
-, sgd_sample=.2)
+, sgd_sample=.1)
 mylog.fit(X, y, verbose=10)
 print(mylog.get_best_score())
