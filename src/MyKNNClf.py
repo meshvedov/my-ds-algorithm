@@ -37,6 +37,9 @@ class MyKNNClf:
         return 1 - (np.sum(row1 * row2) / (np.sqrt(np.sum(row1 ** 2)) * np.sqrt(np.sum(row2 ** 2))))
 
     def _get_prediction_by_weights(self, lst, distance=None):
+        lst = np.array(lst)
+        if distance is not None:
+            distance = np.array(distance)
         dcl = defaultdict(list)
         for i in range(len(lst)):
             denominator = (i + 1) if self.weight == 'rank' else distance[i]
@@ -109,7 +112,7 @@ test_data = pd.DataFrame({
     'feature3': [1.5, 2.5]
 })
 
-knn = MyKNNClf(k=1, weight='rank')
+knn = MyKNNClf(k=3, weight='distance')
 knn.fit(train_data, train_labels)
 print(knn.predict(test_data))
 print(knn.predict_proba(test_data).sum())
