@@ -61,16 +61,10 @@ class MyKNNClf:
         self.train_size = X_train.shape
 
     def predict(self, X_test: pd.DataFrame):
-        predictions=[1 if p >= .5 else 0 for p in self.predict_proba(X_test)]
+        predictions = [1 if p >= .5 else 0 for p in self.predict_proba(X_test)]
         return np.array(predictions)
 
     def predict_proba(self, X_test: pd.DataFrame):
-        # train = np.expand_dims(self.X, axis=0)
-        # test = np.expand_dims(X.to_numpy(), axis=1)
-        # distances = np.sqrt(np.sum((test - train) ** 2, axis=-1))
-        # indx = np.argsort(distances)[:, :self.k]
-        #
-        # return np.mean(self.y[indx], axis=1)
         predictions = []
         for _, row1 in X_test.iterrows():
             distances = []
