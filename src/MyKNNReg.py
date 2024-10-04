@@ -20,19 +20,22 @@ class MyKNNReg:
             'euclidean': np.sqrt(np.sum((test - train) ** 2, axis=-1)),
             'chebyshev': np.max(np.abs(test - train), axis=-1),
             'manhattan': np.sum(np.abs(test - train), axis=-1),
-            'cosine': 1 - np.sum(test * train, axis=-1) / (
-                        np.sqrt(np.sum(test ** 2, axis=-1)) * np.sqrt(np.sum(train ** 2, axis=-1)))
+            'cosine': 1 - np.sum(test * train, axis=-1) / (np.sqrt(np.sum(test ** 2, axis=-1)) * np.sqrt(np.sum(train ** 2, axis=-1)))
         }
 
         if self.metric:
             return met[self.metric]
         return None
 
+    def _get_ws(self, idx, dist):
+        pass
+
     def _get_y_weight(self, idx, dist):
+        ws = (1 / np.arange(1, self.k + 1)) / (np.sum(1 / np.arange(1, self.k + 1)))
         dict_w = {
             'uniform': np.mean(self.y[idx], axis=1),
-            'rank': np.sum(self._get_ws(idx, dist) * self.y[idx], axis=1)
-
+            'rank': np.dot(self.y[idx], ws),
+            'distance': np.sum((1/dist) * self.y[idx], axis=1) / np.sum(1/dist, axis=1)
         }
 
         return dict_w[self.weight]
@@ -47,8 +50,10 @@ class MyKNNReg:
         test = np.expand_dims(X_test.to_numpy(), axis=1)
         distances = self._get_distances(train, test)
         idx = np.argsort(distances)[:, :self.k]
-        y_weight = self._get_y_weight()
-        pred = np.mean(self.y[idx], axis=1)
+        # dist_idx =  np.take_along_axis(distances, idx, axis=1)
+        dist_idx = np.sort(distances)[:, :self.k]
+        pred = self._get_y_weight(idx, dist_idx)
+        # pred = np.mean(self.y[idx], axis=1)
         return pred
 
 
@@ -67,6 +72,6 @@ test_data = pd.DataFrame({
     'feature3': [1.5, 2.5]
 })
 
-knn_reg = MyKNNReg(metric='cosine')
+knn_reg = MyKNNReg(weight='distance')
 knn_reg.fit(train_data, train_labels)
 print(knn_reg.predict(test_data))
