@@ -36,7 +36,7 @@ class MyKNNClf:
     def _distance_cosine(self, row1, row2):
         return 1 - (np.sum(row1 * row2) / (np.sqrt(np.sum(row1 ** 2)) * np.sqrt(np.sum(row2 ** 2))))
 
-    def _get_prediction_by_weights(self, lst, distance=None):
+    def _get_prediction_by_weights(self, lst, distance=None, prob=False):
         lst = np.array(lst)
         if distance is not None:
             distance = np.array(distance)
@@ -51,6 +51,8 @@ class MyKNNClf:
             return lst[0]
         q0 = np.sum(dcl['0']) / np.sum(dcl['0'] + dcl['1'])
         q1 = np.sum(dcl['1']) / np.sum(dcl['0'] + dcl['1'])
+        if prob:
+            return q1
         return 0 if q0 > q1 else 1
 
     def fit(self, X_train: pd.DataFrame, y_train: pd.Series):
@@ -59,22 +61,7 @@ class MyKNNClf:
         self.train_size = X_train.shape
 
     def predict(self, X_test: pd.DataFrame):
-        predictions = []
-        for _, row1 in X_test.iterrows():
-            distances = []
-            for _, row2 in self.X_train.iterrows():
-                distances.append(getattr(self, '_distance_' + self.metric)(row1, row2))
-
-            k_indices = np.argsort(distances)[:self.k]
-            label = self.y_train[k_indices]
-            if self.weight == 'uniform':
-                predictions.append(label.mode()[0] if label.size == 1 else 1)
-            elif self.weight == 'rank':
-                predictions.append(self._get_prediction_by_weights(label))
-            elif self.weight == 'distance':
-                dist = np.array(distances)[k_indices]
-                predictions.append(self._get_prediction_by_weights(label, dist))
-
+        predictions=[1 if p >= .5 else 0 for p in self.predict_proba(X_test)]
         return np.array(predictions)
 
     def predict_proba(self, X_test: pd.DataFrame):
@@ -90,9 +77,15 @@ class MyKNNClf:
             for _, row2 in self.X_train.iterrows():
                 distances.append(getattr(self, '_distance_' + self.metric)(row1, row2))
             k_indices = np.argsort(distances)[:self.k]
-            prob = self.y_train[k_indices].value_counts(normalize=True).to_dict()
-            predictions.append(prob.get(1, 0))
-
+            label = self.y_train[k_indices]
+            if self.weight == 'uniform':
+                prob = label.value_counts(normalize=True).to_dict()
+                predictions.append(prob.get(1, 0))
+            elif self.weight == 'rank':
+                predictions.append(self._get_prediction_by_weights(label, prob=True))
+            elif self.weight == 'distance':
+                dist = np.array(distances)[k_indices]
+                predictions.append(self._get_prediction_by_weights(label, dist, prob=True))
 
         return np.array(predictions)
 
@@ -112,7 +105,7 @@ test_data = pd.DataFrame({
     'feature3': [1.5, 2.5]
 })
 
-knn = MyKNNClf(k=3, weight='distance')
+knn = MyKNNClf(k=3, weight='uniform')
 knn.fit(train_data, train_labels)
 print(knn.predict(test_data))
 print(knn.predict_proba(test_data).sum())
