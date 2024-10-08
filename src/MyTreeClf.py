@@ -13,9 +13,21 @@ class MyTreeClf:
         self.max_leafs = max_leafs
         self.min_samples_split = min_samples_split
         self.max_depth = max_depth
+        self.leafs_cnt = 0
 
     def __str__(self) -> str:
         return f"MyTreeClf class: max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, max_leafs={self.max_leafs}"
+
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+
+        def tree_create(X, y, depth=0):
+            depth += 1
+            col_name, split, ig = get_best_split(X, y)
+            left = X[col_name <= split]
+            right = X[col_name > split]
+
+
+
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
     col_name, split_value, ig = X.columns[0], 0, 0
@@ -53,6 +65,32 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
             col_name, split_value, ig = X.columns[col], thresh, IG
     return col_name, split_value, ig
 
+def get_best_split2(X: pd.DataFrame, y: pd.Series):
+    def best_split(X: pd.Series, y: pd.Series):
+        s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
+        unique_vals = np.sort(X.unique())
+        rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
+        output = []
+
+        def get_log(x):
+            if x == 0:
+                return 0
+            return np.log2(x)
+
+        for rule in rules:
+            left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
+            s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(1 - np.mean(y[left])))
+            s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(1 - np.mean(y[right])))
+            ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+            output.append((X.name, rule, ig))
+        return max(output, key=lambda x: x[2])
+
+    result = []
+    for col in X.columns:
+        result.append(best_split(X[col], y))
+    col_name, split_value, ig = max(result, key=lambda x: x[2])
+
+    return col_name, split_value, ig
 
 tree = MyTreeClf()
 print(get_best_split(X, y))
