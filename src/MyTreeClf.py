@@ -18,12 +18,14 @@ class MyTreeClf:
     def __str__(self) -> str:
         return f"MyTreeClf class: max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, max_leafs={self.max_leafs}"
 
+    # ['node', 'col_name', split_val, [...], [...]] | ['leaf', prob1, ]
     def fit(self, X: pd.DataFrame, y: pd.Series):
-
+        tree = []
         def tree_create(X, y, depth=0):
             depth += 1
             col_name, split, ig = get_best_split(X, y)
             left = X[col_name <= split]
+
             right = X[col_name > split]
 
 
