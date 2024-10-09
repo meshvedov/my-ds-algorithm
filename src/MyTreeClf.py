@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
+from pprint import pprint
 
 df = pd.read_csv('https://archive.ics.uci.edu/static/public/267/banknote+authentication.zip', header=None)
 df.columns = ['variance', 'skewness', 'curtosis', 'entropy', 'target']
-X, y = df.iloc[:, :4].sample(20, random_state=42).reset_index(drop=1) , df['target'].sample(20, random_state=42).reset_index(drop=1)
+X, y = df.iloc[:, :4] , df['target']
+
+# X, y = df.iloc[:, :4].sample(50, random_state=42).reset_index(drop=1) , df['target'].sample(50, random_state=42).reset_index(drop=1)
 
 
 class MyTreeClf:
@@ -23,32 +26,42 @@ class MyTreeClf:
     # ['node', 'col_name', split_val, [...], [...]] | ['leaf', prob1, ]
     def fit(self, X: pd.DataFrame, y: pd.Series):
         def is_leaf(sub: pd.Series, depth):
-            return any([depth == 0,
-                       len(sub) == 1,
-                       sub.value_counts().size == 1])
+            return any([depth < 0,
+                        len(sub) == 1,
+                        sub.value_counts().size == 1,
+                        len(sub) == self.min_samples_split,
+                        self.leafs_cnt >= self.max_leafs - 1])
+        def probability_one(labels: pd.Series):
+            return labels.mean()
 
         def tree_create(X, y, depth=1):
             depth -= 1
             col_name, split, ig = get_best_split2(X, y)
-            left = X[X[col_name] <= split]
-            sub_left, sub_right = [], []
+            left = X[X[col_name] < split]
+            # sub_left, sub_right = [], []
             if is_leaf(y[left.index], depth):
-                p1 = '50'
-                return ['leaf_left', p1]
+                self.leafs_cnt += 1
+                p1_l = probability_one(y[left.index])
+                return ['leaf_left', p1_l]
             else:
                 sub_left = ['node', col_name, split, tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
 
             right = X[X[col_name] > split]
             if is_leaf(y[right.index], depth):
-                p1 = '60'
-                sub_right = ['leaf_right', p1]
+                self.leafs_cnt += 1
+                p1_r = probability_one(y[right.index])
+                sub_right = ['leaf_right', p1_r]
             else:
                 sub_right = tree_create(right.reset_index(drop=1), y[right.index].reset_index(drop=1), depth)
-            return sub_left.append(sub_right)
+            sub_left.append(sub_right)
+            return sub_left
 
         self.tree = tree_create(X, y, depth=self.max_depth)
-        print(self.tree)
+        pprint(self.tree, indent=4)
+        print(self.leafs_cnt)
 
+    def print_tree(self):
+        pass
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
     col_name, split_value, ig = X.columns[0], 0, 0
@@ -117,6 +130,6 @@ def get_best_split2(X: pd.DataFrame, y: pd.Series):
     return col_name, split_value, ig
 
 
-tr = MyTreeClf(max_depth=3)
+tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
 # print(get_best_split(X, y))
 tr.fit(X, y)
