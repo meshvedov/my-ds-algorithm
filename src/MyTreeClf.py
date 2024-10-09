@@ -3,13 +3,15 @@ import pandas as pd
 
 df = pd.read_csv('https://archive.ics.uci.edu/static/public/267/banknote+authentication.zip', header=None)
 df.columns = ['variance', 'skewness', 'curtosis', 'entropy', 'target']
-X, y = df.iloc[:,:4], df['target']
+X, y = df.iloc[:, :4].sample(20, random_state=42).reset_index(drop=1) , df['target'].sample(20, random_state=42).reset_index(drop=1)
+
 
 class MyTreeClf:
     def __init__(self,
                  max_depth=5,
                  min_samples_split=2,
                  max_leafs=20) -> None:
+        self.tree = None
         self.max_leafs = max_leafs
         self.min_samples_split = min_samples_split
         self.max_depth = max_depth
@@ -20,15 +22,32 @@ class MyTreeClf:
 
     # ['node', 'col_name', split_val, [...], [...]] | ['leaf', prob1, ]
     def fit(self, X: pd.DataFrame, y: pd.Series):
-        tree = []
-        def tree_create(X, y, depth=0):
-            depth += 1
-            col_name, split, ig = get_best_split(X, y)
-            left = X[col_name <= split]
+        def is_leaf(sub: pd.Series, depth):
+            return any([depth == 0,
+                       len(sub) == 1,
+                       sub.value_counts().size == 1])
 
-            right = X[col_name > split]
+        def tree_create(X, y, depth=1):
+            depth -= 1
+            col_name, split, ig = get_best_split2(X, y)
+            left = X[X[col_name] <= split]
+            sub_left, sub_right = [], []
+            if is_leaf(y[left.index], depth):
+                p1 = '50'
+                return ['leaf_left', p1]
+            else:
+                sub_left = ['node', col_name, split, tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
 
+            right = X[X[col_name] > split]
+            if is_leaf(y[right.index], depth):
+                p1 = '60'
+                sub_right = ['leaf_right', p1]
+            else:
+                sub_right = tree_create(right.reset_index(drop=1), y[right.index].reset_index(drop=1), depth)
+            return sub_left.append(sub_right)
 
+        self.tree = tree_create(X, y, depth=self.max_depth)
+        print(self.tree)
 
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
@@ -52,11 +71,11 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
                 s_right = -(p0_r * np.log2(p0_r) + p1_r * np.log2(p1_r))
             elif lab_right.size == 1:
                 p0_l, p1_l = lab_left.ravel()
-                s_left = -(p0_l*np.log2(p0_l) + p1_l*np.log2(p1_l))
+                s_left = -(p0_l * np.log2(p0_l) + p1_l * np.log2(p1_l))
             else:
                 p0_l, p1_l = lab_left.ravel()
                 p0_r, p1_r = lab_right.ravel()
-                s_left = -(p0_l*np.log2(p0_l) + p1_l*np.log2(p1_l))
+                s_left = -(p0_l * np.log2(p0_l) + p1_l * np.log2(p1_l))
                 s_right = -(p0_r * np.log2(p0_r) + p1_r * np.log2(p1_r))
 
             IG_temp = S0 - (left.size / feature.shape[0]) * s_left - (right.size / feature.shape[0]) * s_right
@@ -66,6 +85,7 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
         if IG > ig:
             col_name, split_value, ig = X.columns[col], thresh, IG
     return col_name, split_value, ig
+
 
 def get_best_split2(X: pd.DataFrame, y: pd.Series):
     def best_split(X: pd.Series, y: pd.Series):
@@ -81,8 +101,10 @@ def get_best_split2(X: pd.DataFrame, y: pd.Series):
 
         for rule in rules:
             left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
-            s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(1 - np.mean(y[left])))
-            s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(1 - np.mean(y[right])))
+            s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
+                1 - np.mean(y[left])))
+            s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
+                1 - np.mean(y[right])))
             ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
             output.append((X.name, rule, ig))
         return max(output, key=lambda x: x[2])
@@ -94,5 +116,7 @@ def get_best_split2(X: pd.DataFrame, y: pd.Series):
 
     return col_name, split_value, ig
 
-tree = MyTreeClf()
-print(get_best_split(X, y))
+
+tr = MyTreeClf(max_depth=3)
+# print(get_best_split(X, y))
+tr.fit(X, y)
