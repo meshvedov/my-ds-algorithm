@@ -1,3 +1,5 @@
+from unittest.mock import right
+
 import numpy as np
 import pandas as pd
 from pprint import pprint
@@ -31,11 +33,25 @@ class MyTreeClf:
                         sub.size == 1,
                         sub.value_counts().size == 1,
                         sub.size < self.min_samples_split,
-                        self.leafs_cnt > self.max_leafs]
+                        self.leafs_cnt + 1 >= self.max_leafs]
                        )
 
         def probability_one(labels: pd.Series):
             return np.mean(labels)
+
+        def tree_create_(X, y):
+            if self.max_leafs in [1, 2]:
+                col_name, split, ig = get_best_split2(X, y)
+                left = X[X[col_name] < split]
+                p1 = probability_one(y[left.index])
+                leaf_left = ['leaf_left', p1]
+                right = X[X[col_name] > split]
+                p1 = probability_one(y[right.index])
+                leaf_right = ['leaf_right', p1]
+                self.leafs_cnt = 2
+                return ['node', col_name, split, leaf_left, leaf_right]
+            else:
+                return tree_create(X, y, depth=self.max_depth)
 
         def tree_create(X, y, depth=1):
             depth -= 1
@@ -60,7 +76,7 @@ class MyTreeClf:
             sub_left.append(sub_right)
             return sub_left
 
-        self.tree = tree_create(X, y, depth=self.max_depth)
+        self.tree = tree_create_(X, y)
 
     def print_tree(self):
         pprint(self.tree, indent=4)
@@ -131,14 +147,13 @@ def get_best_split2(X: pd.DataFrame, y: pd.Series):
 
     return col_name, split_value, ig
 
-tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2)
-# tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
+# tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2)
+tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
 # tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10)
 # tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17)
 # tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21)
 # tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30)
 # tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=2)
-# print(get_best_split(X, y))
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
 print(tr.leafs_cnt, tr.leafs_sum)
