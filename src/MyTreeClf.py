@@ -29,25 +29,25 @@ class MyTreeClf:
             return any([depth < 0,
                         len(sub) == 1,
                         sub.value_counts().size == 1,
-                        len(sub) == self.min_samples_split,
+                        len(sub) <= self.min_samples_split,
                         self.leafs_cnt >= self.max_leafs - 1])
         def probability_one(labels: pd.Series):
-            return labels.mean()
+            return np.mean(labels)
 
         def tree_create(X, y, depth=1):
             depth -= 1
+            if is_leaf(y, depth):
+                self.leafs_cnt += 1
+                p1_l = probability_one(y)
+                return ['leaf_left', p1_l]
+
             col_name, split, ig = get_best_split2(X, y)
             left = X[X[col_name] < split]
-            # sub_left, sub_right = [], []
-            if is_leaf(y[left.index], depth):
-                self.leafs_cnt += 1
-                p1_l = probability_one(y[left.index])
-                return ['leaf_left', p1_l]
-            else:
-                sub_left = ['node', col_name, split, tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
+            sub_left = ['node', col_name, split, tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
+
 
             right = X[X[col_name] > split]
-            if is_leaf(y[right.index], depth):
+            if is_leaf(y[right.index], depth-1):
                 self.leafs_cnt += 1
                 p1_r = probability_one(y[right.index])
                 sub_right = ['leaf_right', p1_r]
@@ -129,7 +129,11 @@ def get_best_split2(X: pd.DataFrame, y: pd.Series):
 
     return col_name, split_value, ig
 
-
-tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
+# tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2)
+# tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
+# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10)
+# tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17)
+tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21) #!!!!
+# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30)  !!!!
 # print(get_best_split(X, y))
 tr.fit(X, y)
