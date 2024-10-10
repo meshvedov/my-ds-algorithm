@@ -29,7 +29,7 @@ class MyTreeClf:
             return any([depth < 0,
                         len(sub) == 1,
                         sub.value_counts().size == 1,
-                        len(sub) <= self.min_samples_split,
+                        len(sub) < self.min_samples_split,
                         self.leafs_cnt >= self.max_leafs - 1])
         def probability_one(labels: pd.Series):
             return np.mean(labels)
@@ -133,7 +133,7 @@ def get_best_split2(X: pd.DataFrame, y: pd.Series):
 # tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
 # tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10)
 # tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17)
-tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21) #!!!!
-# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30)  !!!!
+# tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21)
+tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30)
 # print(get_best_split(X, y))
 tr.fit(X, y)
