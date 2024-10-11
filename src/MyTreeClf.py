@@ -1,21 +1,23 @@
-from unittest.mock import right
-
 import numpy as np
 import pandas as pd
 from pprint import pprint
 
 df = pd.read_csv('https://archive.ics.uci.edu/static/public/267/banknote+authentication.zip', header=None)
 df.columns = ['variance', 'skewness', 'curtosis', 'entropy', 'target']
-X, y = df.iloc[:, :4] , df['target']
+X, y = df.iloc[:, :4], df['target']
 
 # X, y = df.iloc[:, :4].sample(50, random_state=42).reset_index(drop=1) , df['target'].sample(50, random_state=42).reset_index(drop=1)
+
+X_test = X.sample(10, random_state=42)
 
 
 class MyTreeClf:
     def __init__(self,
                  max_depth=5,
                  min_samples_split=2,
-                 max_leafs=20) -> None:
+                 max_leafs=20,
+                 bins=None) -> None:
+        self.bins = bins
         self.tree = None
         self.max_leafs = max_leafs
         self.min_samples_split = min_samples_split
@@ -63,10 +65,11 @@ class MyTreeClf:
 
             col_name, split, ig = get_best_split2(X, y)
             left = X[X[col_name] < split]
-            sub_left = ['node', col_name, split, tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
+            sub_left = ['node', col_name, split,
+                        tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
 
             right = X[X[col_name] > split]
-            if is_leaf(y[right.index], depth-1):
+            if is_leaf(y[right.index], depth - 1):
                 self.leafs_cnt += 1
                 p1 = probability_one(y[right.index])
                 self.leafs_sum += p1
@@ -80,6 +83,54 @@ class MyTreeClf:
 
     def print_tree(self):
         pprint(self.tree, indent=4)
+
+    def predict_proba(self, X: pd.DataFrame):
+        def walk_tree(obj, lst: list):
+            if lst[0] in ['leaf_left', 'leaf_right']:
+                return lst[1]
+            if lst[0] == 'node':
+                col_name = lst[1]
+                if obj[col_name] <= lst[2]:
+                    return walk_tree(obj, lst[3])
+                else:
+                    return walk_tree(obj, lst[4])
+
+        res = X.apply(lambda x: walk_tree(x, self.tree), axis=1)
+        return res
+
+    def predict(self, X: pd.DataFrame):
+        return np.where(self.predict_proba(X) > .5, 1, 0)
+
+
+def get_best_split2(X: pd.DataFrame, y: pd.Series):
+    def best_split(X: pd.Series, y: pd.Series):
+        s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
+        unique_vals = np.sort(X.unique())
+        rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
+        output = []
+
+        def get_log(x):
+            if x == 0:
+                return 0
+            return np.log2(x)
+
+        for rule in rules:
+            left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
+            s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
+                1 - np.mean(y[left])))
+            s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
+                1 - np.mean(y[right])))
+            ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+            output.append((X.name, rule, ig))
+        return max(output, key=lambda x: x[2])
+
+    result = []
+    for col in X.columns:
+        result.append(best_split(X[col], y))
+    col_name, split_value, ig = max(result, key=lambda x: x[2])
+
+    return col_name, split_value, ig
+
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
     col_name, split_value, ig = X.columns[0], 0, 0
@@ -118,35 +169,6 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
     return col_name, split_value, ig
 
 
-def get_best_split2(X: pd.DataFrame, y: pd.Series):
-    def best_split(X: pd.Series, y: pd.Series):
-        s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
-        unique_vals = np.sort(X.unique())
-        rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
-        output = []
-
-        def get_log(x):
-            if x == 0:
-                return 0
-            return np.log2(x)
-
-        for rule in rules:
-            left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
-            s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
-                1 - np.mean(y[left])))
-            s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
-                1 - np.mean(y[right])))
-            ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
-            output.append((X.name, rule, ig))
-        return max(output, key=lambda x: x[2])
-
-    result = []
-    for col in X.columns:
-        result.append(best_split(X[col], y))
-    col_name, split_value, ig = max(result, key=lambda x: x[2])
-
-    return col_name, split_value, ig
-
 # tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2)
 tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
 # tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10)
@@ -157,3 +179,5 @@ tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
 print(tr.leafs_cnt, tr.leafs_sum)
+print(tr.predict_proba(X_test))
+print(tr.predict(X_test))
