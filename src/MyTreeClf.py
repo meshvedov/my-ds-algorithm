@@ -43,12 +43,14 @@ class MyTreeClf:
 
         def tree_create_(X, y):
             if self.max_leafs in [1, 2]:
-                col_name, split, ig = get_best_split2(X, y)
+                col_name, split, ig = self.get_best_split2(X, y)
                 left = X[X[col_name] < split]
                 p1 = probability_one(y[left.index])
+                self.leafs_sum += p1
                 leaf_left = ['leaf_left', p1]
                 right = X[X[col_name] > split]
                 p1 = probability_one(y[right.index])
+                self.leafs_sum += p1
                 leaf_right = ['leaf_right', p1]
                 self.leafs_cnt = 2
                 return ['node', col_name, split, leaf_left, leaf_right]
@@ -63,7 +65,7 @@ class MyTreeClf:
                 self.leafs_sum += p1
                 return ['leaf_left', p1]
 
-            col_name, split, ig = get_best_split2(X, y)
+            col_name, split, ig = self.get_best_split2(X, y)
             left = X[X[col_name] < split]
             sub_left = ['node', col_name, split,
                         tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
@@ -101,35 +103,43 @@ class MyTreeClf:
     def predict(self, X: pd.DataFrame):
         return np.where(self.predict_proba(X) > .5, 1, 0)
 
+    def _hist_split(self, vals: np.ndarray):
+        if vals.size <= self.bins - 1:
+            return vals
+        _, bins = np.histogram(vals, bins=self.bins)
+        return bins[1:-1]
 
-def get_best_split2(X: pd.DataFrame, y: pd.Series):
-    def best_split(X: pd.Series, y: pd.Series):
-        s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
-        unique_vals = np.sort(X.unique())
-        rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
-        output = []
+    def get_best_split2(self, X: pd.DataFrame, y: pd.Series):
+        def best_split(X: pd.Series, y: pd.Series):
+            s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
+            unique_vals = np.sort(X.unique())
+            if self.bins is not None:
+                rules = self._hist_split(unique_vals)
+            else:
+                rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
+            output = []
 
-        def get_log(x):
-            if x == 0:
-                return 0
-            return np.log2(x)
+            def get_log(x):
+                if x == 0:
+                    return 0
+                return np.log2(x)
 
-        for rule in rules:
-            left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
-            s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
-                1 - np.mean(y[left])))
-            s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
-                1 - np.mean(y[right])))
-            ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
-            output.append((X.name, rule, ig))
-        return max(output, key=lambda x: x[2])
+            for rule in rules:
+                left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
+                s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
+                    1 - np.mean(y[left])))
+                s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
+                    1 - np.mean(y[right])))
+                ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+                output.append((X.name, rule, ig))
+            return max(output, key=lambda x: x[2])
 
-    result = []
-    for col in X.columns:
-        result.append(best_split(X[col], y))
-    col_name, split_value, ig = max(result, key=lambda x: x[2])
+        result = []
+        for col in X.columns:
+            result.append(best_split(X[col], y))
+        col_name, split_value, ig = max(result, key=lambda x: x[2])
 
-    return col_name, split_value, ig
+        return col_name, split_value, ig
 
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
@@ -170,14 +180,21 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
 
 
 # tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2)
-tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
+# tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5)
 # tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10)
 # tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17)
 # tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21)
 # tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30)
 # tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=2)
+
+# tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2, bins=8)
+# tr = MyTreeClf(max_depth=3, min_samples_split=3, max_leafs=5, bins=None)
+# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4) #!!!!
+# tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16) #!!!!
+# tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10) #!!!!!!!!!!!!!!
+tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6) #!!!!!!!!!!!!!!!!!
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
 print(tr.leafs_cnt, tr.leafs_sum)
-print(tr.predict_proba(X_test))
-print(tr.predict(X_test))
+# print(tr.predict_proba(X_test))
+# print(tr.predict(X_test))
