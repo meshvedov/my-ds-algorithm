@@ -17,6 +17,7 @@ class MyTreeClf:
                  min_samples_split=2,
                  max_leafs=20,
                  bins=None) -> None:
+        self.dict_bins = {}
         self.bins = bins
         self.tree = None
         self.max_leafs = max_leafs
@@ -44,7 +45,7 @@ class MyTreeClf:
         def tree_create_(X, y):
             if self.max_leafs in [1, 2]:
                 col_name, split, ig = self.get_best_split2(X, y)
-                left = X[X[col_name] < split]
+                left = X[X[col_name] <= split]
                 p1 = probability_one(y[left.index])
                 self.leafs_sum += p1
                 leaf_left = ['leaf_left', p1]
@@ -59,19 +60,20 @@ class MyTreeClf:
 
         def tree_create(X, y, depth=1):
             depth -= 1
-            if is_leaf(y, depth):
+            if is_leaf(y, depth) or (self.get_best_split2(X, y) is None):
                 self.leafs_cnt += 1
                 p1 = probability_one(y)
                 self.leafs_sum += p1
                 return ['leaf_left', p1]
 
-            col_name, split, ig = self.get_best_split2(X, y)
-            left = X[X[col_name] < split]
+            res = self.get_best_split2(X, y)
+            col_name, split, ig = res
+            left = X[X[col_name] <= split]
             sub_left = ['node', col_name, split,
                         tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
 
             right = X[X[col_name] > split]
-            if is_leaf(y[right.index], depth - 1):
+            if is_leaf(y[right.index], depth - 1) or (self.get_best_split2(right.reset_index(drop=1), y[right.index].reset_index(drop=1)) is None):
                 self.leafs_cnt += 1
                 p1 = probability_one(y[right.index])
                 self.leafs_sum += p1
@@ -103,18 +105,20 @@ class MyTreeClf:
     def predict(self, X: pd.DataFrame):
         return np.where(self.predict_proba(X) > .5, 1, 0)
 
-    def _hist_split(self, vals: np.ndarray):
-        if vals.size <= self.bins - 1:
-            return vals
-        _, bins = np.histogram(vals, bins=self.bins)
-        return bins[1:-1]
+    def _hist_split(self, vals: np.ndarray, col: str):
+        # if vals.size <= self.bins - 1:
+        #     return vals
+        if self.dict_bins.get(col) is None:
+            _, bins = np.histogram(vals, bins=self.bins)
+            self.dict_bins[col] = bins[1:-1]
+        return self.dict_bins[col]
 
     def get_best_split2(self, X: pd.DataFrame, y: pd.Series):
-        def best_split(X: pd.Series, y: pd.Series):
+        def best_split(X: pd.Series, y: pd.Series, col_name: str):
             s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
             unique_vals = np.sort(X.unique())
             if self.bins is not None:
-                rules = self._hist_split(unique_vals)
+                rules = self._hist_split(unique_vals, col_name)
             else:
                 rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
             output = []
@@ -125,18 +129,27 @@ class MyTreeClf:
                 return np.log2(x)
 
             for rule in rules:
-                left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
-                s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
-                    1 - np.mean(y[left])))
-                s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
-                    1 - np.mean(y[right])))
-                ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
-                output.append((X.name, rule, ig))
+                if X.min() <= rule < X.max():
+                    left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
+                    s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
+                        1 - np.mean(y[left])))
+                    s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
+                        1 - np.mean(y[right])))
+                    ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+                    output.append((X.name, rule, ig))
+
+            if len(output) == 0:
+                return None
             return max(output, key=lambda x: x[2])
 
         result = []
         for col in X.columns:
-            result.append(best_split(X[col], y))
+            res = best_split(X[col], y, col)
+            if res is None:
+                continue
+            result.append(res)
+        if result is None or len(result) == 0:
+            return None
         col_name, split_value, ig = max(result, key=lambda x: x[2])
 
         return col_name, split_value, ig
