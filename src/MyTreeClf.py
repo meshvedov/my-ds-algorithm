@@ -16,7 +16,9 @@ class MyTreeClf:
                  max_depth=5,
                  min_samples_split=2,
                  max_leafs=20,
-                 bins=None) -> None:
+                 bins=None,
+                 criterion='entropy') -> None:
+        self.criterion = criterion
         self.dict_bins = {}
         self.bins = bins
         self.tree = None
@@ -115,7 +117,7 @@ class MyTreeClf:
 
     def get_best_split2(self, X: pd.DataFrame, y: pd.Series):
         def best_split(X: pd.Series, y: pd.Series, col_name: str):
-            s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
+            # s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
             unique_vals = np.sort(X.unique())
             if self.bins is not None:
                 rules = self._hist_split(unique_vals, col_name)
@@ -128,14 +130,34 @@ class MyTreeClf:
                     return 0
                 return np.log2(x)
 
+            def entropy(left, right):
+                s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
+                s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
+                    1 - np.mean(y[left])))
+                s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
+                    1 - np.mean(y[right])))
+                ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+                return ig
+
+            def gini(left: np.ndarray, right: np.ndarray):
+                gp = 1 - np.mean(y)**2 - (1 - np.mean(y))**2
+                gl = 1 - np.mean(y[left])**2 - (1 - np.mean(y[left]))**2
+                gr = 1 - np.mean(y[right])**2 - (1 - np.mean(y[right]))**2
+                return gp - (len(left) * gl + len(right) * gr) / len(y)
+
             for rule in rules:
                 if X.min() <= rule < X.max():
                     left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
-                    s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
-                        1 - np.mean(y[left])))
-                    s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
-                        1 - np.mean(y[right])))
-                    ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+                    # s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
+                    #     1 - np.mean(y[left])))
+                    # s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
+                    #     1 - np.mean(y[right])))
+                    # ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+                    ig = 0
+                    if self.criterion == 'entropy':
+                        ig = entropy(left, right)
+                    elif self.criterion == 'gini':
+                        ig = gini(left, right)
                     output.append((X.name, rule, ig))
 
             if len(output) == 0:
@@ -202,12 +224,20 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
 
 # tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2, bins=8)
 # tr = MyTreeClf(max_depth=3, min_samples_split=3, max_leafs=5, bins=None)
-# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4) #!!!!
-# tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16) #!!!!
-# tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10) #!!!!!!!!!!!!!!
-tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6) #!!!!!!!!!!!!!!!!!
+# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4)
+# tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16)
+# tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10)
+# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6)
+
+# tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2, bins=8, criterion='gini')
+# tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5, bins=None, criterion='gini')
+# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4, criterion='entropy')
+# tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16, criterion='gini')
+tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10, criterion='gini')
+# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
+
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
-print(tr.leafs_cnt, tr.leafs_sum)
+print(tr.leafs_cnt, round(tr.leafs_sum, 6))
 # print(tr.predict_proba(X_test))
 # print(tr.predict(X_test))
