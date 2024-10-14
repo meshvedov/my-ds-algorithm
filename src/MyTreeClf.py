@@ -18,6 +18,7 @@ class MyTreeClf:
                  max_leafs=20,
                  bins=None,
                  criterion='entropy') -> None:
+        self.y_init = None
         self.criterion = criterion
         self.dict_bins = {}
         self.bins = bins
@@ -27,6 +28,7 @@ class MyTreeClf:
         self.max_depth = max_depth
         self.leafs_cnt = 0
         self.leafs_sum = 0
+        self.fi = {}
 
     def __str__(self) -> str:
         return f"MyTreeClf class: max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, max_leafs={self.max_leafs}"
@@ -44,6 +46,23 @@ class MyTreeClf:
         def probability_one(labels: pd.Series):
             return np.mean(labels)
 
+        def _gini(y, left, right):
+            gp = 1 - np.mean(y) ** 2 - (1 - np.mean(y)) ** 2
+            gl = 1 - np.mean(y[left]) ** 2 - (1 - np.mean(y[left])) ** 2
+            gr = 1 - np.mean(y[right]) ** 2 - (1 - np.mean(y[right])) ** 2
+            gi = gp - (len(left) * gl + len(right) * gr) / len(y)
+            return gp, gl, gr
+
+        def fi_eval(y, left, right, name):
+            if self.criterion == 'gini':
+                gp, gl, gr = _gini(y, left, right)
+
+            fi = len(y)/self.y_init * (gp - (len(left) * gl + len(right) * gr) / len(y))
+            if self.fi.get(name) is None:
+                self.fi[name] = fi
+            else:
+                self.fi[name] += fi
+
         def tree_create_(X, y):
             if self.max_leafs in [1, 2]:
                 col_name, split, ig = self.get_best_split2(X, y)
@@ -52,6 +71,9 @@ class MyTreeClf:
                 self.leafs_sum += p1
                 leaf_left = ['leaf_left', p1]
                 right = X[X[col_name] > split]
+
+                fi_eval(y, left.index, right.index, col_name)
+
                 p1 = probability_one(y[right.index])
                 self.leafs_sum += p1
                 leaf_right = ['leaf_right', p1]
@@ -82,9 +104,12 @@ class MyTreeClf:
                 sub_right = ['leaf_right', p1]
             else:
                 sub_right = tree_create(right.reset_index(drop=1), y[right.index].reset_index(drop=1), depth)
+
+            fi_eval(y, left.index, right.index, col_name)
             sub_left.append(sub_right)
             return sub_left
 
+        self.y_init = len(y)
         self.tree = tree_create_(X, y)
 
     def print_tree(self):
@@ -233,11 +258,12 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
 # tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5, bins=None, criterion='gini')
 # tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4, criterion='entropy')
 # tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16, criterion='gini')
-tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10, criterion='gini')
-# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
+# tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10, criterion='gini')
+tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
 
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
 print(tr.leafs_cnt, round(tr.leafs_sum, 6))
+pprint(tr.fi)
 # print(tr.predict_proba(X_test))
 # print(tr.predict(X_test))
