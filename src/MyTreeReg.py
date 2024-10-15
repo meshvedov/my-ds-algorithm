@@ -18,6 +18,7 @@ class MyTreeReg:
         self.max_depth = max_depth
         self.leafs_cnt = 0
         self.tree = None
+        self.leafs_sum = 0
 
     def __repr__(self) -> str:
         return (
@@ -27,17 +28,32 @@ class MyTreeReg:
 
     # ['node', 'col_name', split_val, [...], [...]] | ['leaf', avg, ]
     def fit(self, X: pd.DataFrame, y: pd.Series):
-        def create_tree(X: pd.DataFrame, y: pd.Series, name: str) -> (int, list):
-            if True:
+        def create_tree(X: pd.DataFrame, y: pd.Series, name: str, leafs: int) -> (int, list):
+            self.max_depth -= 1
+            if leafs - 1 <= 0 or self.max_depth == 0:
                 avg = np.mean(y)
+                self.leafs_sum += avg
                 return 1, ['leaf_'+name, avg]
 
             col_name, split_val, _ = get_best_split(X, y)
-            left = X[col_name] <= split_val
-            leaf_l, node = create_tree(X.loc[left], y.loc[left], name='left')
-            sub_l = ['node', col_name, split_val, node]
+            leaf_l, node_l = create_tree(X[X[col_name] <= split_val].reset_index(drop=1),
+                                         y[X[col_name] <= split_val].reset_index(drop=1),
+                                         name='left',
+                                         leafs=leafs - 1)
+            sub_l = ['node', col_name, split_val, node_l]
+            leaf_r, node_r = create_tree(X[X[col_name] > split_val].reset_index(drop=1),
+                                         y[X[col_name] > split_val].reset_index(drop=1),
+                                         name='right',
+                                         leafs=leafs - leaf_l - 1)
+            self.leafs_cnt = leaf_l + leaf_r
+            sub_l.append(node_r)
+            return leaf_l + leaf_r, sub_l
 
-        _, self.tree = create_tree(X, y)
+        _, self.tree = create_tree(X, y, name='', leafs=self.max_leafs)
+
+
+    def print_tree(self):
+        pprint(self.tree, indent=4)
 
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
@@ -66,6 +82,12 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
     return col_name, split_value, gain
 
 
-mtr = MyTreeReg(max_depth=1, min_samples_split=1, max_leafs=2)
-print(mtr)
-print(get_best_split(X, y))
+# mtr = MyTreeReg(max_depth=1, min_samples_split=1, max_leafs=2)
+mtr = MyTreeReg(max_depth=3, min_samples_split=2, max_leafs=5)
+
+
+
+mtr.fit(X, y)
+mtr.print_tree()
+print(mtr.leafs_cnt, mtr.leafs_sum)
+# print(get_best_split(X, y))
