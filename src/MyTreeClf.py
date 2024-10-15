@@ -235,10 +235,10 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
 
 # tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2, bins=8, criterion='gini')
 # tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5, bins=None, criterion='gini')
-tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4, criterion='entropy')
+# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4, criterion='entropy')
 # tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16, criterion='gini')
 # tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10, criterion='gini')
-# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
+tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
 
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
