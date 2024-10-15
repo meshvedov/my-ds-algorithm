@@ -33,6 +33,27 @@ class MyTreeClf:
     def __str__(self) -> str:
         return f"MyTreeClf class: max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, max_leafs={self.max_leafs}"
 
+    def _gini(self, y, left, right):
+        gp = 1 - np.mean(y) ** 2 - (1 - np.mean(y)) ** 2
+        gl = 1 - np.mean(y[left]) ** 2 - (1 - np.mean(y[left])) ** 2
+        gr = 1 - np.mean(y[right]) ** 2 - (1 - np.mean(y[right])) ** 2
+        gi = gp - (len(left) * gl + len(right) * gr) / len(y)
+        return gp, gl, gr, gi
+
+    def _entropy(self, y, left, right):
+        def _get_log(x):
+            if x == 0:
+                return 0
+            return np.log2(x)
+
+        s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
+        s1 = -(np.mean(y[left]) * _get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * _get_log(
+            1 - np.mean(y[left])))
+        s2 = -(np.mean(y[right]) * _get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * _get_log(
+            1 - np.mean(y[right])))
+        ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
+        return s0, s1, s2, ig
+
     # ['node', 'col_name', split_val, [...], [...]] | ['leaf', prob1, ]
     def fit(self, X: pd.DataFrame, y: pd.Series):
         def is_leaf(sub: pd.Series, depth):
@@ -46,17 +67,8 @@ class MyTreeClf:
         def probability_one(labels: pd.Series):
             return np.mean(labels)
 
-        def _gini(y, left, right):
-            gp = 1 - np.mean(y) ** 2 - (1 - np.mean(y)) ** 2
-            gl = 1 - np.mean(y[left]) ** 2 - (1 - np.mean(y[left])) ** 2
-            gr = 1 - np.mean(y[right]) ** 2 - (1 - np.mean(y[right])) ** 2
-            gi = gp - (len(left) * gl + len(right) * gr) / len(y)
-            return gp, gl, gr
-
         def fi_eval(y, left, right, name):
-            if self.criterion == 'gini':
-                gp, gl, gr = _gini(y, left, right)
-
+            gp, gl, gr, _ = getattr(self, '_'+self.criterion)(y, left, right)
             fi = len(y)/self.y_init * (gp - (len(left) * gl + len(right) * gr) / len(y))
             if self.fi.get(name) is None:
                 self.fi[name] = fi
@@ -95,7 +107,6 @@ class MyTreeClf:
             left = X[X[col_name] <= split]
             sub_left = ['node', col_name, split,
                         tree_create(left.reset_index(drop=1), y[left.index].reset_index(drop=1), depth)]
-
             right = X[X[col_name] > split]
             if is_leaf(y[right.index], depth - 1) or (self.get_best_split2(right.reset_index(drop=1), y[right.index].reset_index(drop=1)) is None):
                 self.leafs_cnt += 1
@@ -142,49 +153,17 @@ class MyTreeClf:
 
     def get_best_split2(self, X: pd.DataFrame, y: pd.Series):
         def best_split(X: pd.Series, y: pd.Series, col_name: str):
-            # s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
             unique_vals = np.sort(X.unique())
             if self.bins is not None:
                 rules = self._hist_split(unique_vals, col_name)
             else:
                 rules = (unique_vals[:-1] + unique_vals[1:]) * 0.5
             output = []
-
-            def get_log(x):
-                if x == 0:
-                    return 0
-                return np.log2(x)
-
-            def entropy(left, right):
-                s0 = -(np.mean(y) * np.log2(np.mean(y)) + (1 - np.mean(y)) * np.log2(1 - np.mean(y)))
-                s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
-                    1 - np.mean(y[left])))
-                s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
-                    1 - np.mean(y[right])))
-                ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
-                return ig
-
-            def gini(left: np.ndarray, right: np.ndarray):
-                gp = 1 - np.mean(y)**2 - (1 - np.mean(y))**2
-                gl = 1 - np.mean(y[left])**2 - (1 - np.mean(y[left]))**2
-                gr = 1 - np.mean(y[right])**2 - (1 - np.mean(y[right]))**2
-                return gp - (len(left) * gl + len(right) * gr) / len(y)
-
             for rule in rules:
                 if X.min() <= rule < X.max():
                     left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
-                    # s1 = -(np.mean(y[left]) * get_log(np.mean(y[left])) + (1 - np.mean(y[left])) * get_log(
-                    #     1 - np.mean(y[left])))
-                    # s2 = -(np.mean(y[right]) * get_log(np.mean(y[right])) + (1 - np.mean(y[right])) * get_log(
-                    #     1 - np.mean(y[right])))
-                    # ig = s0 - (s1 * len(left) + s2 * len(right)) / len(y)
-                    ig = 0
-                    if self.criterion == 'entropy':
-                        ig = entropy(left, right)
-                    elif self.criterion == 'gini':
-                        ig = gini(left, right)
+                    _, _, _, ig = getattr(self, '_'+self.criterion)(y, left, right)
                     output.append((X.name, rule, ig))
-
             if len(output) == 0:
                 return None
             return max(output, key=lambda x: x[2])
@@ -256,10 +235,10 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
 
 # tr = MyTreeClf(max_depth=1, min_samples_split=1, max_leafs=2, bins=8, criterion='gini')
 # tr = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=5, bins=None, criterion='gini')
-# tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4, criterion='entropy')
+tr = MyTreeClf(max_depth=5, min_samples_split=200, max_leafs=10, bins=4, criterion='entropy')
 # tr = MyTreeClf(max_depth=4, min_samples_split=100, max_leafs=17, bins=16, criterion='gini')
 # tr = MyTreeClf(max_depth=10, min_samples_split=40, max_leafs=21, bins=10, criterion='gini')
-tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
+# tr = MyTreeClf(max_depth=15, min_samples_split=20, max_leafs=30, bins=6, criterion='gini')
 
 tr.fit(X, y)
 pprint(tr.tree, indent=4)
