@@ -16,12 +16,29 @@ class MyTreeReg:
         self.max_leafs = max_leafs
         self.min_samples_split = min_samples_split
         self.max_depth = max_depth
+        self.leafs_cnt = 0
+        self.tree = None
 
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__} class: max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, "
             f"max_leafs={self.max_leafs}"
         )
+
+    # ['node', 'col_name', split_val, [...], [...]] | ['leaf', avg, ]
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        def create_tree(X: pd.DataFrame, y: pd.Series, name: str) -> (int, list):
+            if True:
+                avg = np.mean(y)
+                return 1, ['leaf_'+name, avg]
+
+            col_name, split_val, _ = get_best_split(X, y)
+            left = X[col_name] <= split_val
+            leaf_l, node = create_tree(X.loc[left], y.loc[left], name='left')
+            sub_l = ['node', col_name, split_val, node]
+
+        _, self.tree = create_tree(X, y)
+
 
 def get_best_split(X: pd.DataFrame, y: pd.Series):
     def _mse(y):
@@ -34,7 +51,6 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
 
         mp = _mse(y)
         result = []
-        # y_ = np.array(y)
         for rule in rules:
             left, right = np.where(X <= rule)[0], np.where(X > rule)[0]
             ml, mr = _mse(y[left]), _mse(y[right])
@@ -50,6 +66,6 @@ def get_best_split(X: pd.DataFrame, y: pd.Series):
     return col_name, split_value, gain
 
 
-mtr = MyTreeReg()
+mtr = MyTreeReg(max_depth=1, min_samples_split=1, max_leafs=2)
 print(mtr)
 print(get_best_split(X, y))
